@@ -1,11 +1,10 @@
-# Buduje PhoneMirror.exe w chmurze GitHuba — nie trzeba nic instalować u siebie.
-# Wrzuć projekt na GitHub → zakładka Actions → "Build PhoneMirror.exe" → Run workflow
-# → po ok. 15 min pobierz plik z sekcji Artifacts.
 name: Build PhoneMirror.exe
 on:
   workflow_dispatch:
   push:
     tags: ['v*']
+permissions:
+  contents: write
 jobs:
   windows:
     runs-on: windows-latest
@@ -30,3 +29,8 @@ jobs:
         with:
           name: PhoneMirror-Windows
           path: dist/*.exe
+      - name: Dodaj pliki do wydania
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe
