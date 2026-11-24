@@ -21,6 +21,7 @@ cmake -S "$WORK/UxPlay" -B "$WORK/build" -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build "$WORK/build"
 HELP="$("$WORK/build/uxplay.exe" -h 2>&1 || true)"
 grep -q -- "-vrtp" <<<"$HELP" || { echo "Ta wersja UxPlay nie ma opcji -vrtp — ustaw nowszą: UXPLAY_REF=master"; exit 1; }
+grep -q -- "-artp" <<<"$HELP" || { echo "Ta wersja UxPlay nie ma opcji -artp (dźwięk przez aplikację, potrzebna 1.73+)"; exit 1; }
 
 echo "==> Pakuję do $OUT"
 rm -rf "$OUT"; mkdir -p "$OUT/bin" "$OUT/lib/gstreamer-1.0" "$OUT/libexec/gstreamer-1.0" "$OUT/licenses"

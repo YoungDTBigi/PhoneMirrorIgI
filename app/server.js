@@ -163,8 +163,9 @@ function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = o
     streaming: false, phone: null, lastPacket: 0, width: 0, height: 0,
   };
   const logTail = [];
-  let gop = [];          // klatki od ostatniej klatki kluczowej (dla nowych okien)
-  let gopBytes = 0;
+  let gop = [];          // klatki od ostatniej klatki kluczowej (dla nowych okien i po błędzie dekodera)
+  let gopBytes = 0, gopFull = false;
+  const GOP_MAX_BYTES = 160e6, GOP_MAX_FRAMES = 12000;
 
   const state = () => ({
     type: 'state', config, engine: S.engine, engineMsg: S.engineMsg, enginePath: S.enginePath,
@@ -172,35 +173,68 @@ function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = o
   });
   const toViewers = o => { const s = JSON.stringify(o); for (const v of viewers) v.send(s); };
 
-  // ---- RTP ----
+  // ---- wideo: RTP H.264 ----
+  // Uwaga: NIE odrzucamy klatek i NIE czekamy na klatkę kluczową — iOS wysyła je bardzo rzadko,
+  // a czekanie na nią wyglądało jak zerwane połączenie.
   const depay = new H264Depacketizer((au, key) => {
     const msg = Buffer.concat([Buffer.from([1, key ? 1 : 0]), au]);
-    if (key) { gop = []; gopBytes = 0; }
-    if (gop.length < 900 && gopBytes < 64e6) { gop.push(msg); gopBytes += msg.length; }
-    for (const v of viewers) {
-      if (v.needKey) { if (!key) continue; v.needKey = false; }
-      if (v.backlog > 8e6) { v.needKey = true; continue; } // okno nie nadąża – poczekaj na klatkę kluczową
-      v.send(msg);
+    if (key) { gop = []; gopBytes = 0; gopFull = false; }
+    if (!gopFull) {
+      gop.push(msg); gopBytes += msg.length;
+      if (gop.length > GOP_MAX_FRAMES || gopBytes > GOP_MAX_BYTES) { gopFull = true; gop = []; gopBytes = 0; }
     }
+    for (const v of viewers) v.send(msg);
   });
-  const udp = dgram.createSocket({ type: 'udp4', recvBufferSize: 8 * 1024 * 1024 });
+  const udp = dgram.createSocket({ type: 'udp4', recvBufferSize: 16 * 1024 * 1024 });
   udp.on('message', (m, rinfo) => {
     if (!isLocal(rinfo.address)) return;
     S.lastPacket = Date.now();
     if (!S.streaming) { S.streaming = true; toViewers({ type: 'stream', on: true }); log('▶︎ Odbieram obraz'); }
     depay.push(m);
   });
+
+  // ---- dźwięk: RTP L16 (PCM 16 bit big-endian) ----
+  const audio = dgram.createSocket({ type: 'udp4', recvBufferSize: 4 * 1024 * 1024 });
+  let aPrevTs = null, aPrevSamples = 0, aCh = 2, aRate = 44100, aT0 = 0, aTs0 = null;
+  audio.on('message', (m, rinfo) => {
+    if (!isLocal(rinfo.address) || m.length < 12 || (m[0] >> 6) !== 2) return;
+    const cc = m[0] & 0x0f, ext = m[0] & 0x10, pad = m[0] & 0x20;
+    let off = 12 + cc * 4;
+    if (ext) { if (m.length < off + 4) return; off += 4 + m.readUInt16BE(off + 2) * 4; }
+    let end = m.length; if (pad) end -= m[end - 1];
+    if (end <= off) return;
+    const ts = m.readUInt32BE(4), bytes = end - off, now = Date.now();
+    // liczba kanałów i częstotliwość z samych znaczników czasu RTP
+    if (aPrevTs !== null) {
+      const d = (ts - aPrevTs) >>> 0;
+      if (d > 0 && d < 20000 && aPrevSamples) { const ch = Math.round(aPrevSamples / 2 / d); if (ch === 1 || ch === 2) aCh = ch; }
+    }
+    aPrevTs = ts; aPrevSamples = bytes;
+    if (aTs0 === null || now - aT0 > 30000) { aTs0 = ts; aT0 = now; }
+    else if (now - aT0 > 5000) {
+      // AirPlay prawie zawsze daje 44,1 kHz; zmieniamy tylko przy wyraźnym dowodzie (pomiar z ≥5 s)
+      const r = ((ts - aTs0) >>> 0) / ((now - aT0) / 1000);
+      const hit = [44100, 48000, 32000, 22050, 16000].find(c => Math.abs(r - c) / c < 0.02);
+      if (hit) aRate = hit;
+    }
+    const head = Buffer.alloc(6); head[0] = 2; head[1] = aCh; head.writeUInt32BE(aRate, 2);
+    const msg = Buffer.concat([head, m.subarray(off, end)]);
+    for (const v of viewers) v.send(msg);
+  });
+
+  // Brak pakietów przez dłuższy czas = klonowanie zakończone (okno pokaże ekran oczekiwania,
+  // ale dekoder zostaje gotowy, więc gdy obraz wróci, pojawi się od razu).
   setInterval(() => {
-    if (S.streaming && Date.now() - S.lastPacket > 4000) { S.streaming = false; toViewers({ type: 'stream', on: false, paused: true }); }
-  }, 1000);
+    if (S.streaming && Date.now() - S.lastPacket > 30000) {
+      S.streaming = false; toViewers({ type: 'idle' }); log('… brak obrazu od 30 s');
+    }
+  }, 2000);
 
   // ---- uxplay ----
-  let proc = null, restartTimer = null, backoff = 1000, stopping = false, rtpPort = 0;
+  let proc = null, restartTimer = null, backoff = 1000, stopping = false, rtpPort = 0, audioPort = 0;
   const phoneLeft = () => {
-    if (!S.phone && !gop.length) return;
-    S.phone = null; S.streaming = false; gop = []; gopBytes = 0;
+    S.phone = null; S.streaming = false; gop = []; gopBytes = 0; gopFull = false;
     toViewers({ type: 'phone-left' });
-    log('⏹ Klonowanie zakończone');
   };
   let tail = '';
   const onOutput = chunk => {
@@ -217,7 +251,6 @@ function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = o
       const dev = { ...(S.phone || {}), ...(id ? { id: id[0] } : {}), ...(nm ? { name: nm[1].trim().replace(/^"|"$/g, '') } : {}) };
       if (JSON.stringify(dev) !== JSON.stringify(S.phone)) { S.phone = dev; toViewers({ type: 'phone', device: dev }); log('📱', dev.name || '', dev.id || ''); }
     }
-    if (/teardown|stop mirroring|connection closed|client disconnected|connection lost|destroying connection|conn_destroy/i.test(text)) phoneLeft();
   };
 
   function launch() {
@@ -233,10 +266,11 @@ function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = o
       '-n', config.name || 'PhoneMirror', '-nh',
       '-s', QUALITY[config.quality] || QUALITY.hd,
       '-fps', '60',
-      '-vrtp', `config-interval=1 ! udpsink host=127.0.0.1 port=${rtpPort}`,
-      '-d',
+      '-vrtp', `config-interval=1 ! udpsink host=127.0.0.1 port=${rtpPort} sync=false`,
+      '-d', '1',                      // 1 = bez zrzutów pakietów (pełny -d zalewał wyjście i blokował silnik)
     ];
-    if (!config.audio) args.push('-as', '0');
+    if (config.audio) args.push('-artp', `pt=96 ! udpsink host=127.0.0.1 port=${audioPort} sync=false`);
+    else args.push('-as', '0');
     if (process.env.UXPLAY_ARGS) args.push(...process.env.UXPLAY_ARGS.split(' ').filter(Boolean));
     log('⚙︎ Silnik:', exe, args.join(' '));
     S.engine = 'starting'; S.engineMsg = ''; toViewers(state());
@@ -305,6 +339,7 @@ function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = o
         toViewers(state());
         if (changed) restartEngine();
       } else if (m.type === 'restart') restartEngine();
+      else if (m.type === 'resync') { for (const f of gop) c.send(f); }
     };
   });
 
@@ -315,12 +350,15 @@ function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = o
       udp.once('error', e => (e.code === 'EADDRINUSE' && p < 5700 ? tryBind(p + 2) : reject(e)));
       udp.bind(p, '127.0.0.1', () => {
         rtpPort = p;
-        server.once('error', e => {
-          if (e.code === 'EADDRINUSE' && port !== 0) { port = 0; server.listen(0, '127.0.0.1'); } else reject(e);
-        });
-        server.listen(port, '127.0.0.1', () => {
-          launch();
-          resolve({ port: server.address().port, rtpPort, restartEngine, shutdown });
+        audio.bind(0, '127.0.0.1', () => {
+          audioPort = audio.address().port;
+          server.once('error', e => {
+            if (e.code === 'EADDRINUSE' && port !== 0) { port = 0; server.listen(0, '127.0.0.1'); } else reject(e);
+          });
+          server.listen(port, '127.0.0.1', () => {
+            launch();
+            resolve({ port: server.address().port, rtpPort, audioPort, restartEngine, shutdown });
+          });
         });
       });
     };

@@ -8,10 +8,19 @@ Ekran telefonu pojawia się na komputerze w ramce **Twojego modelu**: iPhone 14 
 iPhone ──AirPlay──▶ silnik (UxPlay, w tle) ──H.264──▶ okno PhoneMirror (ramka telefonu)
 ```
 
-- Dźwięk z telefonu gra na komputerze. Można go wyłączyć.
-- Do wyboru jest zrzut ekranu (Ctrl+S), nagrywanie wideo, pełny ekran (F) i obrót (R).
-- Możesz zmienić nazwę odbiornika widoczną na iPhonie, jakość (720p, 1080p lub 1440p), kolor obudowy i tło.
-- Pionowy ekran wysłany w poziomej klatce jest przycinany automatycznie.
+Okno wygląda jak **„Klonowanie iPhone'a” na Macu**: nie ma ramki Windows, widać tylko telefon.
+
+| Co | Jak |
+|---|---|
+| Przesuwanie okna | chwyć telefon i przeciągnij |
+| Powiększanie i zmniejszanie | uchwyt w prawym dolnym rogu, **Ctrl + kółko myszy**, **Ctrl + / Ctrl −**, **Ctrl 0** = 100% |
+| Pasek z przyciskami (zamknij, minimalizuj, zrzut, nagrywanie, obrót, zawsze na wierzchu, ustawienia) | najedź myszą na okno |
+| Głośność | **kliknij przyciski głośności na obudowie** (przytrzymaj, aby zmieniać płynnie) albo strzałki ↑ ↓ |
+| Wyciszenie | przełącznik lub przycisk Czynność na obudowie albo klawisz M |
+| Zrzut ekranu | przycisk boczny (zasilania), Ctrl+S |
+| Ustawienia (nazwa odbiornika, jakość, model i kolor, rozmiar) | ikona ⚙︎ albo prawy przycisk myszy |
+
+Pliki zrzutów i nagrań trafiają do folderu **Obrazy**.
 
 ---
 
@@ -48,6 +57,7 @@ Skrypt sam zainstaluje przez winget brakujące MSYS2 i Node.js, zbuduje silnik A
 | Czerwony komunikat „Silnik AirPlay nie działa” | Kliknij **Uruchom ponownie**, a potem **Dziennik**: tam jest powód błędu. |
 | Zła ramka telefonu | Wybierz model ręcznie w *Wygląd → Ramka*. Wybór zostanie zapamiętany. |
 | Obraz obrócony w złą stronę | Naciśnij ⟳ albo klawisz R. |
+| Obraz się zacina albo połączenie zrywa | Ustaw jakość 1080p lub 720p. Postaw komputer bliżej routera albo podłącz go kablem. Wyłącz oszczędzanie energii karty Wi‑Fi (Menedżer urządzeń → karta sieciowa → Zarządzanie energią). |
 
 ## Uruchamianie podczas tworzenia (Mac, Linux, Windows)
 Jeśli masz `uxplay` w systemie (`brew install uxplay`, `sudo apt install uxplay`), wpisz:

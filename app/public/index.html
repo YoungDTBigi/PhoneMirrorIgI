@@ -8,104 +8,21 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="app" id="app">
+<div class="win">
+  <!-- pasek nad telefonem: pojawia się po najechaniu, jak w „Klonowaniu iPhone'a” -->
+  <div class="topbar" id="topbar">
+    <button class="dotbtn close" id="bClose" title="Zamknij"><i></i></button>
+    <button class="dotbtn min" id="bMin" title="Minimalizuj"><i></i></button>
+    <span class="title" id="tbTitle">PhoneMirror</span>
+    <span class="sep"></span>
+    <button id="bShot" title="Zrzut ekranu (Ctrl+S)"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.5-2h5L16 6.5h2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg></button>
+    <button id="bRec" title="Nagrywaj ekran"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none"/></svg></button>
+    <button id="bRotate" title="Obróć (R)"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8.5"/><path d="M20 3.5v5h-5"/><path d="M20 12a8 8 0 0 1-13.7 5.6L4 15.5"/><path d="M4 20.5v-5h5"/></svg></button>
+    <button id="bPin" class="onlyapp" title="Zawsze na wierzchu"><svg viewBox="0 0 24 24"><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3z"/><path d="M12 14v7"/></svg></button>
+    <button id="bSettings" title="Ustawienia"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  </div>
 
-  <!-- ===== Sidebar ===== -->
-  <aside class="sidebar" id="sidebar">
-    <div class="drag"></div>
-    <header class="brand">
-      <img src="icon.svg" alt="" width="38" height="38">
-      <div>
-        <h1>PhoneMirror</h1>
-        <p id="statusLine"><span class="dot" id="dot"></span><span id="statusText">Uruchamianie…</span></p>
-      </div>
-    </header>
-
-    <section class="group" id="engineBox" hidden>
-      <div class="card alert">
-        <div class="row col">
-          <span class="alert-title">Silnik AirPlay nie działa</span>
-          <span class="label" id="engineMsg"></span>
-          <div class="btnrow"><button class="pbtn" id="bRestart">Uruchom ponownie</button><a class="pbtn ghost" href="/log" target="_blank">Dziennik</a></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="group">
-      <h2>Odbiornik AirPlay</h2>
-      <div class="card">
-        <div class="row col">
-          <span class="label">Nazwa widoczna na iPhonie</span>
-          <input class="text" id="recvName" maxlength="40" spellcheck="false" value="PhoneMirror">
-        </div>
-        <div class="sep"></div>
-        <div class="row">
-          <span>Jakość</span>
-          <select id="qualSel" class="select"><option value="sd">720p</option><option value="hd">1080p</option><option value="qhd">1440p</option></select>
-        </div>
-        <div class="sep"></div>
-        <label class="row"><span>Dźwięk z telefonu</span><input type="checkbox" class="switch" id="tAudio" checked></label>
-      </div>
-    </section>
-
-    <section class="group">
-      <h2>Urządzenie</h2>
-      <div class="card">
-        <div class="row"><span>Model</span><span class="val" id="iModel">—</span></div>
-        <div class="sep"></div>
-        <div class="row"><span>Obraz</span><span class="val" id="iRes">—</span></div>
-        <div class="sep"></div>
-        <div class="row"><span>Klatki</span><span class="val" id="iFps">—</span></div>
-      </div>
-    </section>
-
-    <section class="group">
-      <h2>Wygląd</h2>
-      <div class="card">
-        <div class="row">
-          <span>Ramka</span>
-          <select id="modelSel" class="select"></select>
-        </div>
-        <div class="sep"></div>
-        <div class="row col">
-          <span class="label" id="colorName">Kolor</span>
-          <div class="swatches" id="swatches"></div>
-        </div>
-        <div class="sep"></div>
-        <div class="row">
-          <span>Tło</span>
-          <div class="seg" id="bgSeg">
-            <button data-v="auto">Auto</button><button data-v="light">Jasne</button><button data-v="dark">Ciemne</button><button data-v="aurora">Aurora</button>
-          </div>
-        </div>
-        <div class="sep"></div>
-        <label class="row"><span>Pokaż ramkę telefonu</span><input type="checkbox" class="switch" id="tFrame" checked></label>
-      </div>
-    </section>
-
-    <section class="group help">
-      <h2>Jak połączyć iPhone'a</h2>
-      <ol>
-        <li>iPhone i komputer w tej samej sieci Wi‑Fi.</li>
-        <li>Na iPhonie otwórz <b>Centrum sterowania</b> (przesuń w dół od prawego górnego rogu).</li>
-        <li>Stuknij <b>Klonowanie ekranu</b> <span class="mirroricon"></span> i wybierz <b id="helpName">PhoneMirror</b>.</li>
-      </ol>
-      <p class="note">Na telefonie nic nie trzeba instalować.</p>
-    </section>
-  </aside>
-
-  <!-- ===== Stage ===== -->
-  <main class="stage" id="stage">
-    <div class="drag"></div>
-    <div class="toolbar" id="toolbar">
-      <button id="bSide" title="Pokaż/ukryj panel"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="3.5"/><path d="M9.5 4.5v15"/></svg></button>
-      <span class="tsep"></span>
-      <button id="bRotate" title="Obróć"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8.5"/><path d="M20 3.5v5h-5"/><path d="M20 12a8 8 0 0 1-13.7 5.6L4 15.5"/><path d="M4 20.5v-5h5"/></svg></button>
-      <button id="bShot" title="Zrzut ekranu"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.5-2h5L16 6.5h2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg></button>
-      <button id="bRec" title="Nagrywaj"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle class="recdot" cx="12" cy="12" r="4"/></svg></button>
-      <button id="bFull" title="Pełny ekran"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
-    </div>
-
+  <div class="stage" id="stage">
     <div class="device" id="device">
       <i class="btn b-sw"></i><i class="btn b-vu"></i><i class="btn b-vd"></i><i class="btn b-pw"></i><i class="btn b-cc"></i>
       <div class="band">
@@ -113,6 +30,7 @@
           <div class="screen">
             <div class="content" id="content">
               <canvas id="cv" width="1170" height="2532"></canvas>
+
               <div class="lock" id="lock">
                 <div class="sbar"><span class="sb-time" id="sbTime">9:41</span>
                   <span class="sb-icons">
@@ -129,16 +47,70 @@
                   <div class="lk-title">Klonowanie ekranu</div>
                   <div class="lk-sub2">W Centrum sterowania wybierz</div>
                   <div class="lk-name" id="lkName">PhoneMirror</div>
-                  <div class="lk-addr" id="lkStatus">Gotowy do połączenia</div>
+                  <div class="lk-addr" id="lkStatus">Uruchamianie…</div>
+                  <button class="lk-gear" id="lkGear">Ustawienia</button>
                 </div>
                 <div class="lk-bottom">
-                  <span class="lk-round"><svg class="flash" viewBox="0 0 24 24"><path d="M8 3h8v3l-2 3v11a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V9L8 6z"/><path d="M12 12.5v2"/></svg></span>
+                  <span class="lk-round"><svg class="torch" viewBox="0 0 24 24"><path d="M8 3h8v3l-2 3v11a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V9L8 6z"/><path d="M12 12.5v2"/></svg></span>
                   <span class="lk-round"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.5-2h5L16 6.5h2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5" fill="#0006"/></svg></span>
+                </div>
+              </div>
+
+              <div class="vhud" id="vhud"><div class="fill" id="vfill"></div>
+                <svg viewBox="0 0 24 24" id="vicon"><path d="M4 9h3l5-4v14l-5-4H4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </div>
+              <div class="pill" id="pill"></div>
+              <div class="flash" id="flash"></div>
+
+              <div class="sheet-bg" id="sheetBg"></div>
+              <div class="sheet" id="sheet">
+                <div class="grab"></div>
+                <header><h3>Ustawienia</h3><button id="sheetDone">Gotowe</button></header>
+                <div class="body">
+                  <div class="ios-h">Odbiornik AirPlay</div>
+                  <div class="ios-g">
+                    <label class="ios-r"><span>Nazwa</span><input class="text" id="recvName" maxlength="40" spellcheck="false"></label>
+                    <div class="ios-r col"><span>Jakość obrazu</span>
+                      <div class="ios-seg" id="qualSeg"><button data-v="sd">720p</button><button data-v="hd">1080p</button><button data-v="qhd">1440p</button></div>
+                    </div>
+                    <label class="ios-r"><span>Dźwięk z telefonu</span><input type="checkbox" class="ios-sw" id="tAudio"></label>
+                  </div>
+                  <div class="ios-note">Tę nazwę zobaczysz na iPhonie w Centrum sterowania → Klonowanie ekranu.</div>
+
+                  <div class="ios-h">Telefon</div>
+                  <div class="ios-g">
+                    <label class="ios-r"><span>Model</span><select id="modelSel"></select></label>
+                    <div class="ios-r col"><span id="colorName">Kolor</span><div class="sw-row" id="swatches"></div></div>
+                    <label class="ios-r"><span>Pokaż obudowę</span><input type="checkbox" class="ios-sw" id="tFrame"></label>
+                  </div>
+
+                  <div class="ios-h">Okno</div>
+                  <div class="ios-g">
+                    <div class="ios-r col"><span>Rozmiar <span class="v" id="sizeVal"></span></span><input type="range" class="ios-range" id="sizeRange" min="30" max="220" step="1"></div>
+                    <label class="ios-r onlyapp-row" id="onTopRow"><span>Zawsze na wierzchu</span><input type="checkbox" class="ios-sw" id="tOnTop"></label>
+                  </div>
+                  <div class="ios-note">Rozmiar zmienisz też uchwytem w prawym dolnym rogu albo Ctrl + kółko myszy. Okno przesuwasz, chwytając telefon.</div>
+
+                  <div class="ios-h">Przyciski na obudowie</div>
+                  <div class="ios-g">
+                    <div class="ios-r"><span>Głośność + / −</span><span class="v">głośność dźwięku</span></div>
+                    <div class="ios-r"><span>Przełącznik / Czynność</span><span class="v">wycisz</span></div>
+                    <div class="ios-r"><span>Boczny</span><span class="v">zrzut ekranu</span></div>
+                  </div>
+
+                  <div class="ios-h">Informacje</div>
+                  <div class="ios-g">
+                    <div class="ios-r"><span>Połączony</span><span class="v" id="iModel">—</span></div>
+                    <div class="ios-r"><span>Obraz</span><span class="v" id="iRes">—</span></div>
+                    <div class="ios-r"><span>Klatki z telefonu</span><span class="v" id="iFps">—</span></div>
+                    <div class="ios-r"><span>Silnik AirPlay</span><span class="v" id="iEngine">—</span></div>
+                    <div class="ios-r"><a href="/log" target="_blank">Pokaż dziennik silnika</a><a href="#" id="bRestart">Uruchom ponownie</a></div>
+                  </div>
+                  <div class="ios-note err" id="engineMsg"></div>
                 </div>
               </div>
             </div>
             <div class="glare"></div>
-            <div class="homebar"></div>
           </div>
           <div class="cutout"><i class="spk"></i><i class="lens"></i></div>
           <div class="home-top"><i class="cam"></i><i class="spk2"></i></div>
@@ -146,9 +118,9 @@
         </div>
       </div>
     </div>
-
-    <div class="toast" id="toast"></div>
-  </main>
+  </div>
+  <div class="grip" id="grip" title="Przeciągnij, aby zmienić rozmiar"></div>
+  <div class="sizebadge" id="sizeBadge">100%</div>
 </div>
 <script src="devices.js"></script>
 <script src="app.js"></script>
