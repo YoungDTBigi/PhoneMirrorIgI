@@ -5,25 +5,27 @@
   --shadow: 0 0 0 .5px rgba(0,0,0,.35), 0 6px 14px rgba(0,0,0,.28), 0 2px 4px rgba(0,0,0,.18);
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: transparent !important; }
 body { font: 13px/1.35 var(--font); -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; color: #1d1d1f; }
 button, select, input { font: inherit; color: inherit; }
-body.browser { background: radial-gradient(1200px 800px at 50% 30%, #3a3c44, #17181c 70%); }
+html:has(body.browser), body.browser { background: radial-gradient(1200px 800px at 50% 30%, #3a3c44, #17181c 70%) !important; }
 
 .win { position: fixed; inset: 0; }
-.stage { position: absolute; inset: 0; -webkit-app-region: drag; }
-.electron .stage { cursor: default; }
+.stage { position: absolute; inset: 0; }
+.device { z-index: 10; }
 
 /* ---------- pasek nad telefonem (pojawia się po najechaniu) ---------- */
 .topbar {
-  position: absolute; left: 50%; top: 6px; transform: translate(-50%, -4px); z-index: 20;
+  position: absolute; left: 50%; top: 7px; transform: translate(-50%, 38px) scale(.94); z-index: 5;
   display: flex; align-items: center; gap: 2px; padding: 3px; height: 32px; border-radius: 16px;
   background: rgba(40, 40, 44, .72); color: #f5f5f7;
   backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%);
   box-shadow: 0 0 0 .5px rgba(255,255,255,.14), 0 4px 14px rgba(0,0,0,.3);
-  opacity: 0; transition: opacity .2s, transform .2s; -webkit-app-region: no-drag; white-space: nowrap;
+  opacity: 0; pointer-events: none; white-space: nowrap;
+  transition: opacity .18s, transform .42s cubic-bezier(.2, 1.25, .35, 1);
 }
-body:hover .topbar, .topbar.show { opacity: 1; transform: translate(-50%, 0); }
+/* wysuwa się spod górnej krawędzi telefonu */
+body.hover .topbar, .sheet-open .topbar { opacity: 1; transform: translate(-50%, 0) scale(1); pointer-events: auto; }
 .topbar button { width: 28px; height: 26px; border: 0; background: none; border-radius: 13px; display: grid; place-items: center; cursor: pointer; padding: 0; }
 .topbar button:hover { background: rgba(255,255,255,.14); }
 .topbar button.on { color: var(--accent); }
@@ -40,12 +42,12 @@ body:hover .topbar, .topbar.show { opacity: 1; transform: translate(-50%, 0); }
 /* uchwyt zmiany rozmiaru */
 .grip {
   position: absolute; right: 4px; bottom: 4px; width: 22px; height: 22px; z-index: 20; cursor: nwse-resize;
-  -webkit-app-region: no-drag; opacity: 0; transition: opacity .2s; border-radius: 6px;
+  opacity: 0; transition: opacity .2s; border-radius: 6px;
   background:
     linear-gradient(135deg, transparent 55%, rgba(255,255,255,.75) 55%, rgba(255,255,255,.75) 62%, transparent 62%, transparent 72%, rgba(255,255,255,.75) 72%, rgba(255,255,255,.75) 79%, transparent 79%);
   filter: drop-shadow(0 0 1px rgba(0,0,0,.7));
 }
-body:hover .grip { opacity: .9; }
+body.hover .grip { opacity: .9; }
 .browser .grip { display: none; }
 
 .sizebadge {

@@ -4,10 +4,17 @@
   const $ = id => document.getElementById(id);
   const stage = $('stage'), device = $('device'), cv = $('cv');
   const ctx = cv.getContext('2d', { alpha: false, desynchronized: true });
-  const W = window.pmWindow || null;              // dostępne tylko w aplikacji (Electron)
-  const APP = !!W;
+  const APP = new URLSearchParams(location.search).get('app') === 'electron';
   document.body.classList.add(APP ? 'electron' : 'browser');
-  const PAD = 24, TOP = 44;                        // margines na cień i na pasek u góry
+  const PAD = 12, TOP = 46;                        // niewidoczny (przezroczysty) margines na cień i na wysuwany pasek
+  // sterowanie oknem aplikacji idzie przez ten sam lokalny WebSocket co obraz
+  const winSend = o => { if (APP && R.ws && R.ws.readyState === 1) R.ws.send(JSON.stringify({ type: 'win', ...o })); };
+  const W = APP ? {
+    setSize: (w, h, anchor) => { R.pendingSize = { w, h }; winSend({ op: 'size', w, h, anchor }); },
+    minimize: () => winSend({ op: 'minimize' }), close: () => winSend({ op: 'close' }),
+    onTop: v => winSend({ op: 'onTop', v }), ignore: v => winSend({ op: 'ignore', v }),
+    dragStart: (sx, sy) => winSend({ op: 'dragStart', sx, sy }), dragMove: (sx, sy) => winSend({ op: 'dragMove', sx, sy }),
+  } : null;
 
   // ---------- ustawienia lokalne ----------
   const store = {
@@ -164,15 +171,35 @@
   $('bRotate').onclick = () => { if (R.hasImage) R.flip = !R.flip; else R.manualLand = !R.manualLand; R.land = !R.land; layout('center'); };
   $('bSettings').onclick = () => toggleSheet();
   $('lkGear').onclick = () => toggleSheet(true);
-  async function syncOnTop(v) {
-    if (!W) return;
-    const on = await W.onTop(v);
-    $('bPin').classList.toggle('on', on); $('tOnTop').checked = on;
-  }
-  $('bPin').onclick = () => syncOnTop(!$('bPin').classList.contains('on'));
-  $('tOnTop').onchange = e => syncOnTop(e.target.checked);
+  function showOnTop(on) { $('bPin').classList.toggle('on', on); $('tOnTop').checked = on; }
+  $('bPin').onclick = () => W && W.onTop(!$('bPin').classList.contains('on'));
+  $('tOnTop').onchange = e => W && W.onTop(e.target.checked);
   if (!APP) $('onTopRow').style.display = 'none';
-  syncOnTop();
+
+  // ---- najechanie myszą: pasek wysuwa się spod telefonu; obok telefonu kliknięcia idą do pulpitu ----
+  let hoverT, ignoring = null;
+  const setIgnore = v => { if (!APP || v === ignoring) return; ignoring = v; W.ignore(v); };
+  const HIT = '.device, .topbar, .grip';
+  addEventListener('mousemove', e => {
+    const hit = e.target.closest && e.target.closest(HIT);
+    if (!R.dragging && !document.body.classList.contains('resizing')) setIgnore(!hit);
+    if (hit) { document.body.classList.add('hover'); clearTimeout(hoverT); }
+    else { clearTimeout(hoverT); hoverT = setTimeout(() => document.body.classList.remove('hover'), 600); }
+  });
+  document.addEventListener('mouseleave', () => { clearTimeout(hoverT); hoverT = setTimeout(() => document.body.classList.remove('hover'), 600); });
+
+  // ---- przesuwanie okna: chwyć telefon ----
+  device.addEventListener('pointerdown', e => {
+    if (!APP || e.button !== 0 || e.target.closest('.btn, .sheet, .sheet-bg, button, input, select, a')) return;
+    R.dragging = true; device.setPointerCapture(e.pointerId);
+    W.dragStart(e.screenX, e.screenY);
+    let raf = 0, last = e;
+    const move = ev => { last = ev; if (!raf) raf = requestAnimationFrame(() => { raf = 0; W.dragMove(last.screenX, last.screenY); }); };
+    const up = () => { R.dragging = false; device.removeEventListener('pointermove', move); };
+    device.addEventListener('pointermove', move);
+    device.addEventListener('pointerup', up, { once: true });
+    device.addEventListener('pointercancel', up, { once: true });
+  });
 
   // =====================================================================
   //  Arkusz ustawień
@@ -497,7 +524,7 @@
     const ws = new WebSocket(`ws://${location.host}/ws`);
     ws.binaryType = 'arraybuffer';
     R.ws = ws;
-    ws.onopen = () => { retry = 400; };
+    ws.onopen = () => { retry = 400; lastWin = ''; layout(); };
     ws.onmessage = e => {
       if (typeof e.data !== 'string') {
         const t = new Uint8Array(e.data, 0, 1)[0];
@@ -508,6 +535,7 @@
       else if (m.type === 'phone') onPhone(m.device);
       else if (m.type === 'phone-left') onPhoneLeft();
       else if (m.type === 'idle') { setLive(false); flushAudio(); }
+      else if (m.type === 'win-state') onWinState(m);
     };
     ws.onclose = () => {
       R.engine = 'disconnected'; updateStatus();
@@ -516,16 +544,16 @@
   }
 
   // pierwszy start aplikacji: telefon na ~80% wysokości ekranu
-  (async () => {
-    if (APP && !S.scale) {
-      const wa = await W.workArea();
-      const m = currentModel();
-      const h = (m.style === 'home' ? m.h + 216 : m.h + 2 * (m.bz + m.bd));
-      S.scale = Math.max(.4, Math.min(1.4, (wa.height * 0.82 - TOP - PAD) / h));
-      store.set('scale', S.scale);
+  function onWinState(m) {
+    showOnTop(!!m.onTop);
+    if (APP && !S.scale && m.workArea) {
+      const md = currentModel();
+      const h = (md.style === 'home' ? md.h + 216 : md.h + 2 * (md.bz + md.bd));
+      S.scale = Math.max(.4, Math.min(1.4, (m.workArea.height * 0.8 - TOP - PAD) / h));
+      store.set('scale', S.scale); lastWin = ''; layout();
     }
-    applyModel();
-  })();
+  }
+  applyModel();
   window.PhoneMirror = { R, S, layout, setScale, setVolume, toggleSheet, audio: () => actx && { state: actx.state, rate: aRate, gain: gain && gain.gain.value } };
   connect();
 })();

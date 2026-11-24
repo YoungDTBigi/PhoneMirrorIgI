@@ -155,7 +155,8 @@ function engineEnv(exe, dataDir) {
 
 const QUALITY = { sd: '1280x720', hd: '1920x1080', qhd: '2560x1440' };
 
-function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = os.tmpdir() } = {}) {
+function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = os.tmpdir(), onWindow = null } = {}) {
+  let winState = null;   // stan okna aplikacji (zawsze na wierzchu, obszar ekranu) – od Electrona
   let config = loadConfig();
   const viewers = new Set();
   const S = {
@@ -325,6 +326,7 @@ function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = o
     const c = new WSConn(sock);
     viewers.add(c);
     c.json(state());
+    if (winState) c.json({ type: 'win-state', ...winState });
     for (const m of gop) c.send(m); // od razu pokaż aktualny obraz
     c.onclose = () => viewers.delete(c);
     c.onmessage = txt => {
@@ -340,6 +342,7 @@ function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = o
         if (changed) restartEngine();
       } else if (m.type === 'restart') restartEngine();
       else if (m.type === 'resync') { for (const f of gop) c.send(f); }
+      else if (m.type === 'win' && onWindow) onWindow(m);   // sterowanie oknem (przez WebSocket – bez preload)
     };
   });
 
@@ -357,7 +360,8 @@ function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = o
           });
           server.listen(port, '127.0.0.1', () => {
             launch();
-            resolve({ port: server.address().port, rtpPort, audioPort, restartEngine, shutdown });
+            resolve({ port: server.address().port, rtpPort, audioPort, restartEngine, shutdown,
+              setWinState: o => { winState = { ...(winState || {}), ...o }; toViewers({ type: 'win-state', ...winState }); } });
           });
         });
       });
