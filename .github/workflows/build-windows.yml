@@ -1,0 +1,32 @@
+# Buduje PhoneMirror.exe w chmurze GitHuba — nie trzeba nic instalować u siebie.
+# Wrzuć projekt na GitHub → zakładka Actions → "Build PhoneMirror.exe" → Run workflow
+# → po ok. 15 min pobierz plik z sekcji Artifacts.
+name: Build PhoneMirror.exe
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+      - name: Silnik AirPlay
+        shell: msys2 {0}
+        run: ./scripts/build-engine.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Aplikacja i instalator
+        working-directory: app
+        run: |
+          npm install
+          npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PhoneMirror-Windows
+          path: dist/*.exe

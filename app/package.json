@@ -1,0 +1,35 @@
+{
+  "name": "phonemirror",
+  "productName": "PhoneMirror",
+  "version": "1.0.0",
+  "description": "Odbiornik AirPlay: ekran iPhone'a na komputerze w ramce prawdziwego modelu telefonu.",
+  "main": "main.js",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "start": "electron .",
+    "web": "node server.js",
+    "dist": "electron-builder --win nsis portable --x64"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.phonemirror.app",
+    "productName": "PhoneMirror",
+    "directories": { "output": "../dist", "buildResources": "build" },
+    "files": ["main.js", "server.js", "public/**", "build/icon.png"],
+    "extraResources": [{ "from": "../engine", "to": "engine", "filter": ["**/*"] }],
+    "win": { "icon": "build/icon.png", "artifactName": "${productName}-${version}-${arch}-${target}.${ext}" },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "PhoneMirror",
+      "include": "build/installer.nsh",
+      "artifactName": "PhoneMirror-Setup-${version}.${ext}"
+    },
+    "portable": { "artifactName": "PhoneMirror-${version}-portable.${ext}" }
+  }
+}
