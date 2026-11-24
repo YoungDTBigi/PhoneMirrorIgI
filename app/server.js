@@ -155,6 +155,23 @@ function engineEnv(exe, dataDir) {
 
 const QUALITY = { sd: '1280x720', hd: '1920x1080', qhd: '2560x1440' };
 
+// Kody zakończenia procesu w Windows → zrozumiały opis
+function explainExit(code, signal) {
+  if (signal) return `sygnał ${signal}`;
+  const hex = code > 0x7fffffff || code < 0 ? '0x' + (code >>> 0).toString(16).toUpperCase() : String(code);
+  const known = {
+    '0xC0000005': 'awaria silnika (naruszenie pamięci) – często sterownik grafiki lub wtyczka multimediów',
+    '0xC0000135': 'brak biblioteki DLL – niekompletna instalacja',
+    '0xC000007B': 'uszkodzona lub niepasująca biblioteka DLL',
+    '0xC0000409': 'awaria silnika (przepełnienie bufora)',
+    '0xC000001D': 'procesor nie obsługuje wymaganych instrukcji',
+  };
+  return `kod ${hex}${known[hex] ? ' – ' + known[hex] : ''}`;
+}
+// Tryby awaryjne, gdy silnik pada zaraz po starcie:
+// 0 = normalnie, 1 = bez przekazywania dźwięku do aplikacji, 2 = dodatkowo losowy identyfikator urządzenia
+const SAFE_MODES = ['normalny', 'awaryjny: bez dźwięku', 'awaryjny: bez dźwięku + losowy identyfikator'];
+
 function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = os.tmpdir(), onWindow = null } = {}) {
   let winState = null;   // stan okna aplikacji (zawsze na wierzchu, obszar ekranu) – od Electrona
   let config = loadConfig();
@@ -170,7 +187,7 @@ function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = o
 
   const state = () => ({
     type: 'state', config, engine: S.engine, engineMsg: S.engineMsg, enginePath: S.enginePath,
-    streaming: S.streaming, phone: S.phone, host: os.hostname(), ips: lanIPs(),
+    streaming: S.streaming, phone: S.phone, host: os.hostname(), ips: lanIPs(), safeMode: SAFE_MODES[S.safeMode || 0],
   });
   const toViewers = o => { const s = JSON.stringify(o); for (const v of viewers) v.send(s); };
 
@@ -233,6 +250,8 @@ function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = o
 
   // ---- uxplay ----
   let proc = null, restartTimer = null, backoff = 1000, stopping = false, rtpPort = 0, audioPort = 0;
+  let safeMode = 0, quickCrashes = 0, startedAt = 0;
+  const note = line => { const l = '[PhoneMirror] ' + line; logTail.push(l); if (logTail.length > 400) logTail.shift(); log(l); };
   const phoneLeft = () => {
     S.phone = null; S.streaming = false; gop = []; gopBytes = 0; gopFull = false;
     toViewers({ type: 'phone-left' });
@@ -243,7 +262,7 @@ function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = o
     tail = (tail + text).slice(-6000);
     for (const line of text.split(/\r?\n/)) {
       if (!line.trim()) continue;
-      logTail.push(line); if (logTail.length > 200) logTail.shift();
+      logTail.push(line); if (logTail.length > 400) logTail.shift();
     }
     // model urządzenia, np. iPhone14,7, i nazwa z plisty klienta
     const id = text.match(/\b(iPhone|iPad|iPod)\d{1,2},\d{1,2}\b/);
@@ -270,32 +289,47 @@ function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = o
       '-vrtp', `config-interval=1 ! udpsink host=127.0.0.1 port=${rtpPort} sync=false`,
       '-d', '1',                      // 1 = bez zrzutów pakietów (pełny -d zalewał wyjście i blokował silnik)
     ];
-    if (config.audio) args.push('-artp', `pt=96 ! udpsink host=127.0.0.1 port=${audioPort} sync=false`);
+    if (config.audio && safeMode === 0) args.push('-artp', `pt=96 ! udpsink host=127.0.0.1 port=${audioPort} sync=false`);
     else args.push('-as', '0');
+    if (safeMode >= 2) args.push('-m');
     if (process.env.UXPLAY_ARGS) args.push(...process.env.UXPLAY_ARGS.split(' ').filter(Boolean));
-    log('⚙︎ Silnik:', exe, args.join(' '));
-    S.engine = 'starting'; S.engineMsg = ''; toViewers(state());
+    note(`Start silnika (tryb ${SAFE_MODES[safeMode]}): ${path.basename(exe)} ${args.join(' ')}`);
+    S.engine = 'starting'; S.engineMsg = ''; S.safeMode = safeMode; toViewers(state());
+    startedAt = Date.now();
     const env = engineEnv(exe, dataDir);
+    if (!env.GST_DEBUG) env.GST_DEBUG = '2';          // błędy GStreamera trafią do dziennika
+    env.GST_DEBUG_NO_COLOR = '1';
     try {
       proc = spawn(exe, args, { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     } catch (e) { S.engine = 'crashed'; S.engineMsg = String(e.message || e); toViewers(state()); return; }
     const me = proc;
     proc.stdout.on('data', onOutput); proc.stderr.on('data', onOutput);
     proc.on('spawn', () => {
-      setTimeout(() => { if (proc === me && S.engine === 'starting') { S.engine = 'running'; backoff = 1000; toViewers(state()); } }, 1200);
+      setTimeout(() => { if (proc === me && S.engine === 'starting') { S.engine = 'running'; backoff = 1000; toViewers(state()); } }, 4000);
     });
     proc.on('error', e => { S.engine = 'crashed'; S.engineMsg = e.message; toViewers(state()); });
-    proc.on('exit', code => {
+    proc.on('exit', (code, signal) => {
       if (proc !== me) return;
       proc = null; phoneLeft();
       if (stopping) return;
+      const why = explainExit(code, signal);
+      const lived = Date.now() - startedAt;
+      note(`Silnik zakończył działanie po ${(lived / 1000).toFixed(1)} s: ${why}`);
+      if (lived < 10000) {
+        quickCrashes++;
+        if (quickCrashes >= 2 && safeMode < SAFE_MODES.length - 1) {
+          safeMode++; quickCrashes = 0; backoff = 1000;
+          note(`Przełączam na tryb ${SAFE_MODES[safeMode]}`);
+        }
+      } else quickCrashes = 0;
       S.engine = 'crashed';
-      S.engineMsg = `Silnik AirPlay zakończył działanie (kod ${code}). ${logTail.slice(-3).join(' | ')}`;
-      toViewers(state()); log('✗', S.engineMsg);
+      S.engineMsg = `Silnik AirPlay zakończył działanie (${why}). Ponawiam…`;
+      toViewers(state());
       restartTimer = setTimeout(launch, backoff); backoff = Math.min(backoff * 2, 30000);
     });
   }
   function restartEngine() {
+    safeMode = 0; quickCrashes = 0; backoff = 1000;
     if (proc) { const p = proc; proc = null; p.removeAllListeners('exit'); p.kill(); }
     phoneLeft(); setTimeout(launch, 400);
   }
@@ -307,7 +341,12 @@ function start({ port = +process.env.PORT || 8420, engineDir = null, dataDir = o
   const server = http.createServer((req, res) => {
     if (!isLocal(req.socket.remoteAddress)) { res.writeHead(403); return res.end(); }
     const u = new URL(req.url, 'http://x');
-    if (u.pathname === '/log') { res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' }); return res.end(logTail.join('\n')); }
+    if (u.pathname === '/log') {
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+      const head = `PhoneMirror ${(() => { try { return require('./package.json').version; } catch { return ''; } })()} | ${os.type()} ${os.release()} ${os.arch()} | ${os.cpus()[0] ? os.cpus()[0].model : ''} | silnik: ${S.enginePath || '-'}\n` +
+        `Sieci: ${lanIPs().map(i => i.name + '=' + i.address).join(', ') || 'brak'}\n\n`;
+      return res.end(head + logTail.join('\n'));
+    }
     const p = u.pathname === '/' ? '/index.html' : decodeURIComponent(u.pathname);
     const f = path.normalize(path.join(PUB, p));
     if (!f.startsWith(PUB + path.sep)) { res.writeHead(403); return res.end(); }

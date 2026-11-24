@@ -306,12 +306,13 @@
     if (bad) { lk = 'Odbiornik nie działa — otwórz Ustawienia'; eng = 'błąd'; }
     else if (R.engine === 'disconnected') { lk = 'Brak połączenia z aplikacją'; eng = '—'; }
     else if (R.engine === 'running') { lk = 'Gotowy do połączenia'; eng = 'działa'; }
+    if (R.safeMode && R.safeMode !== 'normalny') { eng += ' (' + R.safeMode + ')'; if (R.engine === 'running') lk = 'Gotowy (tryb awaryjny, bez dźwięku)'; }
     $('lkStatus').textContent = lk; $('lkStatus').classList.toggle('lk-err', bad);
     $('lkName').textContent = name; $('iEngine').textContent = eng;
     $('engineMsg').textContent = bad ? (R.engineMsg || '') : '';
   }
   function onState(m) {
-    R.config = m.config; R.engine = m.engine; R.engineMsg = m.engineMsg;
+    R.config = m.config; R.engine = m.engine; R.engineMsg = m.engineMsg; R.safeMode = m.safeMode;
     if (document.activeElement !== nameIn) nameIn.value = m.config.name;
     [...$('qualSeg').children].forEach(b => b.classList.toggle('sel', b.dataset.v === m.config.quality));
     $('tAudio').checked = !!m.config.audio;

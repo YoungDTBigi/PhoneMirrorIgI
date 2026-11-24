@@ -28,16 +28,20 @@ rm -rf "$OUT"; mkdir -p "$OUT/bin" "$OUT/lib/gstreamer-1.0" "$OUT/libexec/gstrea
 cp "$WORK/build/uxplay.exe" "$OUT/bin/"
 cp /ucrt64/libexec/gstreamer-1.0/gst-plugin-scanner.exe "$OUT/libexec/gstreamer-1.0/"
 
-# Wtyczki GStreamera. LEAN=1 = tylko potrzebne (mniejszy instalator), domyślnie wszystkie (najpewniej).
-if [ "${LEAN:-0}" = "1" ]; then
-  for n in coreelements app typefindfunctions playback videoparsersbad audioparsers libav videoconvertscale videoconvert \
-           videoscale videofilter autodetect rtp rtpmanager udp audioconvert audioresample volume wasapi wasapi2 \
-           directsound d3d11 isomp4 jpeg opengl; do
-    cp /ucrt64/lib/gstreamer-1.0/libgst$n.dll "$OUT/lib/gstreamer-1.0/" 2>/dev/null || true
-  done
-else
-  cp /ucrt64/lib/gstreamer-1.0/*.dll "$OUT/lib/gstreamer-1.0/"
-fi
+# Wtyczki GStreamera. Kopiujemy wszystkie OPRÓCZ tych, które zależą od konkretnego sprzętu/sterowników
+# (NVIDIA, Intel QSV, AMD, D3D12, Vulkan, Qt/GTK…). Na części komputerów takie wtyczki potrafiły
+# wywrócić silnik zaraz po starcie. UxPlay ich nie potrzebuje.
+SKIP='nvcodec|nvdswrapper|cuda|d3d12|qsv|amfcodec|vulkan|qml|qt|gtk|opencv|webrtc|srt|libvisual|opengl|directshow|winscreencap|wic|dwrite|onnx|svtav1|rav1e|lv2|ladspa|openh264|x265|aom|dav1d|nice|sctp|rist|zbar|chromaprint'
+for f in /ucrt64/lib/gstreamer-1.0/*.dll; do
+  n=$(basename "$f")
+  if [[ "$n" =~ ^libgst($SKIP) ]]; then continue; fi
+  cp "$f" "$OUT/lib/gstreamer-1.0/"
+done
+echo "Wtyczek GStreamera: $(ls "$OUT/lib/gstreamer-1.0" | wc -l)"
+# Kontrola: najważniejsze elementy muszą być
+for need in coreelements app videoparsersbad rtp udp libav audioconvert audioresample; do
+  [ -f "$OUT/lib/gstreamer-1.0/libgst$need.dll" ] || { echo "Brak wymaganej wtyczki: $need"; exit 1; }
+done
 
 # Wszystkie zależne biblioteki DLL z /ucrt64
 ldd "$OUT/bin/uxplay.exe" "$OUT"/lib/gstreamer-1.0/*.dll "$OUT"/libexec/gstreamer-1.0/*.exe 2>/dev/null \
@@ -46,7 +50,11 @@ ldd "$OUT/bin/uxplay.exe" "$OUT"/lib/gstreamer-1.0/*.dll "$OUT"/libexec/gstreame
 cp "$WORK/UxPlay/LICENSE" "$OUT/licenses/UxPlay-LICENSE.txt" 2>/dev/null || true
 echo "UxPlay source: https://github.com/FDH2/UxPlay (commit $(git -C "$WORK/UxPlay" rev-parse --short HEAD))" > "$OUT/licenses/UxPlay-SOURCE.txt"
 
-echo "==> Test: silnik startuje?"
-( cd "$OUT/bin" && GST_PLUGIN_SYSTEM_PATH_1_0="$OUT/lib/gstreamer-1.0" ./uxplay.exe -h >/dev/null 2>&1 ) && echo "OK"
+echo "==> Test: GStreamer widzi potrzebne elementy?"
+export PATH="$OUT/bin:$PATH" GST_PLUGIN_SYSTEM_PATH_1_0="$OUT/lib/gstreamer-1.0" GST_PLUGIN_PATH_1_0="$OUT/lib/gstreamer-1.0" \
+       GST_PLUGIN_SCANNER_1_0="$OUT/libexec/gstreamer-1.0/gst-plugin-scanner.exe" GST_REGISTRY_1_0="$WORK/test-registry.bin"
+for el in appsrc h264parse rtph264pay rtpL16pay udpsink avdec_aac avdec_alac audioconvert audioresample; do
+  /ucrt64/bin/gst-inspect-1.0.exe "$el" >/dev/null 2>&1 && echo "  ok  $el" || { echo "  BRAK $el"; exit 1; }
+done
 du -sh "$OUT"
 echo "Gotowe: $OUT"
